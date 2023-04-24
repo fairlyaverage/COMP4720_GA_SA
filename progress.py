@@ -51,7 +51,7 @@ def update_progress_info(part, whole):
     return average_interval, elapsed, estimated_time_to_completion, estimated_total_time
 
 def progress(part, whole):
-    whole -= 1 # if exclusive range e.g. i in range(10) only goes from 0-9
+    # whole -= 1 # if exclusive range e.g. i in range(10) only goes from 0-9
     if part == 0: progress_info()
     MAX = 50 # + '[] 100.0%' 8-9 extra chars
     # special characters

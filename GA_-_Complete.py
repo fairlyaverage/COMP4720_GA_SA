@@ -10,9 +10,9 @@ def set_default_global_vars():
     number_of_airports = 3
     number_of_cities = 1000
     number_of_generations = 1000 # this is actually iterations?
-    mutation_rate = 0.001
+    mutation_rate = 0.075
     population_size = 50
-    number_of_iterations = 1000 # generations
+    number_of_iterations = 500 # generations
     number_of_trials = 1
 
     set_airports(number_of_airports)
@@ -190,26 +190,24 @@ def generate_cities(number_of_cities):
 
 
 def run_experiment(number_of_trials, number_of_cities, number_of_airports):
-    log = []
+    data = {} # maybe use
     accuracies = []
     times = []  # Store the time taken for each iteration
     # cities = np.random.rand(number_of_cities, 2) * 100 # gen 2-d array for city locations?; update to read this from file or pass between GA and SA
     cities = generate_cities(number_of_cities)
 
-
-    fitness_values_all_runs = np.zeros((number_of_trials, number_of_iterations)) # what is this? 'run 1000 trials', 'run 1000 generations' maybe?
+    fitness_values_all_runs = np.zeros((number_of_trials, number_of_iterations)) # for 1000 trials 1000 generations
 
     for i in range(number_of_trials): # run experiment this many times
+        progress(i, int(number_of_trials))
         print(f"Run {i + 1} of {number_of_trials}") # replace progress bar here
         start_time = time.time()  # Start the timer
-        best_solution, fitness_values, generation_times_list, best_solution_fitness = find_airports(number_of_cities, number_of_airports, cities) # most of the action here # sanity check: best_solution_fitness == fitness_values.max()
+        best_solution, fitness_values, generation_times_list, best_solution_fitness, generation_population_fitness_scores = find_airports(number_of_cities, number_of_airports, cities) # most of the action here # sanity check: best_solution_fitness == fitness_values.max()
+        # use progress bar
         end_time = time.time()  # End the timer
-        # record fitness value(s?) for this generation
 
-        #sanity:
+        fitness_values_all_runs[i] = fitness_values # [ [ g_1 g_2 g_3 g_4 ... g_n ], ] # BEST INDIVIDUAL
 
-
-        fitness_values_all_runs[i] = fitness_values # [ [ g_1 g_2 g_3 g_4 ... g_n ], ]
         # input(f"fitness_all_runs={fitness_values_all_runs}")
         elapsed_time = (end_time - start_time) # / (number_of_cities * number_of_airports)  # Calculate the time per city and airport
         times.append(elapsed_time)  # Add the elapsed time to the list of times
@@ -222,9 +220,18 @@ def run_experiment(number_of_trials, number_of_cities, number_of_airports):
         for each in times:
             sum+=each
         average = sum/len(times)
-        # progress.progress(i, number_of_trials)
         print(f"Run {i} took {elapsed_time:.2f} seconds, reached accuracy {acc:.10f}, the best individual was {best_solution}. The total time is {sum} with an average run time of {average}")
 
+        # save data
+        # 2D arr at this point? [#generations][#individuals] but want to save each
+        data[str(i)] = {
+            '': generation_population_fitness_scores,
+            'best_solution': None,
+            'best_solution_score': None,
+            'trial_time': None,
+            # populate what data you want
+            # save it every trial so it can be accessed if this crashes
+        }
     # for each run want:
     run_statistics = {
         "accuracy": acc,
@@ -248,53 +255,44 @@ def run_experiment(number_of_trials, number_of_cities, number_of_airports):
 
 def find_airports(number_of_cities, number_of_airports, cities): # called once per trial
     population = create_population(number_of_cities, number_of_airports)
-    # print(population)
-    best_individual = None
-    best_fitness = None
+    best_individual = None # not used
+    best_fitness = None # not used
     fitness_values = np.zeros(number_of_iterations)
     times = []
     best_fitness_score_in_all_generations = 0
     best_solution_in_all_generations = None
+
+    generation_population_fitness_scores = np.zeros((number_of_iterations, population_size))
+
     for iteration in range(number_of_iterations): # "number_of_generations"
         progress(iteration, number_of_iterations)
         # timer
         start = time.time()
+
+        # generational actions
         parents = select_parents(population, cities)
         # this only selects two parents but needs to happen for the entire population, twice essentially
         # parents = select_parents(population, cities) # is this trying to change cities? it shouldn't, those are static locations, should only need population for this?
         # input(f"parents={parents}, range(len(parents)) {range(len(parents))}")
         children = []
         for i in range(0,len(parents) - 1,2):
-            # print(f"get p[{i}], p[{i+1}]")
             brother, sister=crossover(parents[i], parents[i+1]) # pass mom and dad, get two siblings back
             # twins, it's always twins
             children.append(brother)
             children.append(sister)
-            # children.append(crossover(parents[i], parents[i+1]))
-        # input(f"children={children}")
         for child in children:
             child, tf = mutate(child) # tf for debug
             # if tf: print(f"child {child} mutated={tf}")
-        # print(f"pop_size={len(population)}, children_size={len(children)}")
-        # input(f"{children}")
         population = children
-        # child = crossover(parents[0], parents[1])
-        # input(f"child={child}")
-        # child = mutate(child)
-        # child = mutate(child, number_of_cities) # number_of_cities? every
 
-        # input(f"{population}")
-        # all population fitnesses
-
-
-        # population_fitnesses = [fitness_prime(individual, cities) for individual in population] # cities is a 2d array [ [ x, y ],..., [x_N, y_N] ] of city coordinates; list of every population member's fitness
-        # input(f"fitnesses = {fitnesses}")
-
+        # generational stats
+        # population_fitness_scores = []
         best_fitness_score = 0 # in generation
         best_solution = None # in generation
         # in this generation
         for i in range(len(population)):
             fitness_score = fitness_prime(population[i], cities) # should store each individual's fitness score in an indexed array
+            generation_population_fitness_scores[iteration][i]=fitness_score # [iteration-th][i-th individual]
             # population_fitnesses[i] = score
             if fitness_score > best_fitness_score:
                 best_fitness_score = fitness_score # float
@@ -307,60 +305,16 @@ def find_airports(number_of_cities, number_of_airports, cities): # called once p
             best_fitness_score_in_all_generations = best_fitness_score
             best_solution_in_all_generations = best_solution
 
-        # then take this entire array, maybe save it, but definitely get the best fitness out of it
-        # best = fitness_values.max() # best score
-        # still want to save the actual individual that did this
-
-
-        # print("for individual in population = [")
-        # all = []
-        # for individual in population:fitnesses
-        #     all.append(fitness_prime(individual, cities))
-        #     # print(f"{fitness_prime(individual, cities)}, ")
-        # print(f"{max(all)}]")
-        # input(f"best_fitness_score={best_fitness_score} (is this the same value for every generation?)")
         fitness_values[iteration] = best_fitness_score # set best score this generation to fitness_values[generation]
 
-        # input(f"fitness_values = {fitness_values}")
-        # print("fitnesses", fitnesses, "len=()", len(fitnesses))
-        # print(f"\n\nfitness_values", fitness_values, "len()=", len(fitness_values))
-
-        # this sets the worst index to child?
-        # worst_index = np.argmin(fitnesses)
-        # population[worst_index] = child
-
-        # for individual in population:
-        #     # redundant call to fitness_prime()? fitnesses already has every member's fitness and nothing's changed since it was last set
-        #     individual_fitness = fitness_prime(individual, cities)
-        #     if best_fitness is None or individual_fitness > best_fitness:
-        #         best_individual = individual
-        #         best_fitness = individual_fitness
-
-
-        # improve
-        # set np array = population size
-        # store fitnesses there (should contain k population fitnesses)
-        # min(fitnesses) = current_best
-        # index_of_best = fitness.index(min(fitnesses)) could return duplicate solution, but it doesn't really matter it'll still be a tie for best
-        # if current_best > all_time_best: all_time_best_coordinates = current_best_coordinates to store a new better individual solution
-
-
-        # fitness_values[iteration] = best_fitness
-
-
-        # end generation run time
+        # maybe get times out of progress bar
         end = time.time()
         times.append(end - start) # add this generation's delta time to times; len(times) == number_of_generations on return
         # debug
         # print(f"{iteration}th generation took {(end - start):.2f} seconds, fittest individual is {(best_fitness_score*10000):.5f} (dist: {(1/best_fitness_score):.5f}) current best fitness is {(best_fitness_score_in_all_generations*100000):.5f} which is a distance delta of {(1/best_fitness_score_in_all_generations):.5f}")
     # return best_individual, fitness_values, times
-    return best_solution_in_all_generations, fitness_values, times, best_fitness_score_in_all_generations # need to find min fitness for plotting
+    return best_solution_in_all_generations, fitness_values, times, best_fitness_score_in_all_generations, generation_population_fitness_scores # need to find min fitness for plotting
 
-# Run the experiment
-# # runs, # cities, # airports
-# number_of_trials = 5
-# number_of_cities = 1000
-# number_of_airports = 3
 # set_default_global_vars() or manually call setters first
 set_default_global_vars()
 if (input("change defaults y") == "y"):
