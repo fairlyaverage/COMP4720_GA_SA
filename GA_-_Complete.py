@@ -15,7 +15,6 @@ def plot_ga_convergence(population, num_iterations, cities):
         fitness_values[i] = max([fitness_prime(individual, cities) for individual in population])
     return fitness_values
 
-
 # Define accuracy function
 def accuracy(individual, cities, num_cities, num_airports):
     distances = np.zeros(len(cities))
@@ -23,13 +22,12 @@ def accuracy(individual, cities, num_cities, num_airports):
         distances[i] = np.min(np.linalg.norm(cities[i] - individual, axis=1))
     return np.sum(distances) / (num_cities * num_airports)
 
-
-# Define fitness function
-def fitness(individual, cities):
-    distances = np.zeros(len(cities))
-    for i in range(len(cities)):
-        distances[i] = np.min(np.linalg.norm(cities[i] - individual, axis=1)) ** 2
-    return 1 / (np.sum(distances) + 1e-6)
+# Define fitness function - old, using fitness_prime() now
+# def fitness(individual, cities):
+#     distances = np.zeros(len(cities))
+#     for i in range(len(cities)):
+#         distances[i] = np.min(np.linalg.norm(cities[i] - individual, axis=1)) ** 2
+#     return 1 / (np.sum(distances) + 1e-6)
 
 def fitness_prime(individual, cities):
     '''
@@ -56,17 +54,14 @@ def fitness_prime(individual, cities):
         # print(distances[i], f"after {i}th city")
     # for distance in distances: distance_sum += distance.min() # only care about distance to closest airport for each city
     # or
-    return 1 / np.sum(distances.min(axis=1)) # possibly faster?
-
+    return 1 / np.sum(distances.min(axis=1)) # returns an individual [solution's] fitness value
 
 # Define GA functions
 def create_individual(num_cities, num_airports):
     return np.random.rand(num_airports, 2) * 100
 
-
 def create_population(num_cities, num_airports):
     return [create_individual(num_cities, num_airports) for i in range(population_size)]
-
 
 def mutate(individual, num_cities):
     if random.random() < mutation_rate:
@@ -74,7 +69,6 @@ def mutate(individual, num_cities):
         i = random.randint(0, len(individual) - 1)
         individual[i] = np.random.rand(1, 2) * 100
     return individual
-
 
 def crossover(parent1, parent2):
     child = np.zeros_like(parent1)
@@ -85,7 +79,6 @@ def crossover(parent1, parent2):
             child[i] = parent2[i]
     return child
 
-
 def select_parents(population, cities):
     fitnesses = [fitness_prime(individual, cities) for individual in population]
     sum_fitnesses = sum(fitnesses)
@@ -95,7 +88,6 @@ def select_parents(population, cities):
     parent1, parent2 = random.choices(population, weights=probabilities, k=2)
     return parent1, parent2
 
-
 def run_experiment(num_runs, num_cities, num_airports):
     log = []
     accuracies = []
@@ -104,9 +96,9 @@ def run_experiment(num_runs, num_cities, num_airports):
     fitness_values_all_runs = np.zeros((num_runs, num_iterations)) # what is this? 'run 1000 trials', 'run 1000 generations' maybe?
 
     for i in range(num_runs): # run experiment this many times
-        print(f"Run {i + 1} of {num_runs}")
+        print(f"Run {i + 1} of {num_runs}") # replace progress bar here
         start_time = time.time()  # Start the timer
-        best_individual, fitness_values = find_airports(num_cities, num_airports, cities)
+        best_individual, fitness_values, generation_times_list = find_airports(num_cities, num_airports, cities) # most of the action here
         end_time = time.time()  # End the timer
         fitness_values_all_runs[i] = fitness_values
         elapsed_time = (end_time - start_time) # / (num_cities * num_airports)  # Calculate the time per city and airport
@@ -125,8 +117,9 @@ def run_experiment(num_runs, num_cities, num_airports):
 
     # for each run want:
     run_statistics = {
-        accuracy: acc,
-        times:
+        "accuracy": acc,
+        "times": generation_times_list, # 2-d list of [each trial][each generation's runtime]
+
     }
         # { accuracy: float, times: [], average_time: float, total_time: float, best_individual: [ n (x,y) tuples ], best_individual_each_run: { number_of_generations [ n (x,y) tuples ] } }
         # accuracy = -1 # solution (best individual) accuracy() = (Sum of the distance between each of the N cities and its nearest airport) / (N × n) = fitness^-1 / (N*n) because fitness is 1/(sum of distances)
@@ -141,41 +134,49 @@ def run_experiment(num_runs, num_cities, num_airports):
             # derive
             # best_individual = {}
 
+    return accuracies, times, fitness_values_all_runs, run_statistics
 
-
-    return accuracies, times, fitness_values_all_runs
-
-
-def find_airports(num_cities, num_airports, cities):
+def find_airports(num_cities, num_airports, cities): # called once per trial
     population = create_population(num_cities, num_airports)
     best_individual = None
     best_fitness = None
     fitness_values = np.zeros(num_iterations)
     times = []
 
-    for iteration in range(num_iterations):
+    for iteration in range(num_iterations): # "number_of_generations"
+        # timer
         start = time.time()
+
         parents = select_parents(population, cities) # is this trying to change cities? it shouldn't, those are static locations, should only need population for this?
         child = crossover(parents[0], parents[1])
         child = mutate(child, num_cities) # num_cities? every
 
-        fitnesses = [fitness_prime(individual, cities) for individual in population] # cities is a 2d array [ [ x, y ],..., [x_N, y_N] ] of city coordinates
+        fitnesses = [fitness_prime(individual, cities) for individual in population] # cities is a 2d array [ [ x, y ],..., [x_N, y_N] ] of city coordinates; list of every population member's fitness
         worst_index = np.argmin(fitnesses)
         population[worst_index] = child
 
+        #
         for individual in population:
+            # redundant call to fitness_prime()? fitnesses already has every member's fitness and nothing's changed since it was last set
             individual_fitness = fitness_prime(individual, cities)
             if best_fitness is None or individual_fitness > best_fitness:
                 best_individual = individual
                 best_fitness = individual_fitness
+        # improve
+        # set np array = population size
+        # store fitnesses there (should contain k population fitnesses)
+        # min(fitnesses) = current_best
+        # index_of_best = fitness.index(min(fitnesses)) could return duplicate solution, but it doesn't really matter it'll still be a tie for best
+        # if current_best > all_time_best: all_time_best_coordinates = current_best_coordinates to store a new better individual solution
+
 
         fitness_values[iteration] = best_fitness
         # debug
         print(f"{iteration}th generation took {(time.time() - s):.2f} seconds, fittest individual is {(min(fitnesses)*10000):.5f} (dist: {(1/min(fitnesses)):.5f}) current best fitness is {(best_fitness*100000):.5f} which is a distance delta of {(1/best_fitness):.5f}")
 
-        # generation run time
+        # end generation run time
         end = time.time()
-        times.append(end - start)
+        times.append(end - start) # add this generation's delta time to times; len(times) == number_of_generations on return
     return best_individual, fitness_values, times
 
 
@@ -184,7 +185,7 @@ def find_airports(num_cities, num_airports, cities):
 num_runs = 5
 N = 1000
 n = 3
-accuracies, times, fitness_values_all_runs = run_experiment(num_runs, N, n)
+accuracies, times, fitness_values_all_runs, run_statistics = run_experiment(num_runs, N, n)
 
 # Calculate mean and standard deviation of accuracies
 mean_accuracy = np.mean(accuracies)
@@ -250,3 +251,7 @@ def set_iterations(n):
     global number_of_iterations
     number_of_iterations = n
     return number_of_iterations
+
+# write useful stats to file every run
+def save_stats():
+    return True
