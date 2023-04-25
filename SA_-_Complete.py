@@ -23,11 +23,24 @@ def plot_convergence(results):
     plt.ylabel('Energy')
     plt.show()
 
-# fitness?
-def energy(state, city_coords):
-    # sqrt adds overhead, not necessary b/c if sqrt(a^2+b^2) = c, sqrt(a'^2 + b'^2) = c' and c < c', then c^2 < c'^2
-    dists = np.sqrt(np.sum(np.min((city_coords.reshape(-1, 1, 2) - state.reshape(1, -1, 2)) ** 2, axis=1)))
-    return np.sum(dists ** 2)
+# cost, objective function
+# def energy(state, city_coords):
+#     # sqrt adds overhead, not necessary b/c if sqrt(a^2+b^2) = c, sqrt(a'^2 + b'^2) = c' and c < c', then c^2 < c'^2
+#     dists = np.sqrt(np.sum(np.min((city_coords.reshape(-1, 1, 2) - state.reshape(1, -1, 2)) ** 2, axis=1)))
+#     return np.sum(dists ** 2)
+
+def energy(individual,cities):
+    return 1 / fitness_prime(individual, cities)
+
+def fitness_prime(individual, cities):
+    distances = np.zeros((len(cities), len(individual))) # 2d array for storing locations, return minimum for each city (this is the dist to the closest airport)
+    for i in range(len(cities)): # each city
+        city_x, city_y = cities[i]
+        for j in range(len(individual)): # each airport
+            airport_x, airport_y = individual[j]
+            distances[i][j] = pow(city_x - airport_x, 2) + pow(city_y - airport_y, 2) # linear distance (x_c - x_a)^2 + (y_c - y_a)^2
+    # fitness score: higher is better but this wants to minimize distances
+    return 1/np.sum(distances.min(axis=1)) # returns an individual [solution's] fitness value
 
 def transition(state, T):
     new_state = state.copy()
