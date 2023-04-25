@@ -3,17 +3,18 @@ import matplotlib.pyplot as plt
 import random
 import time
 from progress import *
+import json
+import os
 
-# Define GA parameters
 # set global vars
 def set_default_global_vars():
-    number_of_airports = 3
-    number_of_cities = 1000
+    number_of_airports = 5
+    number_of_cities = 500
     number_of_generations = 1000 # this is actually iterations?
-    mutation_rate = 0.075
-    population_size = 50
+    mutation_rate = 0.01 # .075 is pretty good
+    population_size = 50 # even number please
     number_of_iterations = 500 # generations
-    number_of_trials = 1
+    number_of_trials = 5
 
     set_airports(number_of_airports)
     set_cities(number_of_cities)
@@ -62,28 +63,57 @@ def set_iterations(n):
     return number_of_iterations
 
 # write useful stats to file every run
-def save_stats():
+def save_data(trial_data, *args): # handle *args?
+    """ save data to file
+        try catch
+        duplicate and then overwrite old one
+        write to new file
+        if success: rename new file to old file
+        delete or overwrite new file for next save
+        need to figure out how to append the object
+    """
+    trial_data['generation_population_fitness_scores'] = trial_data['generation_population_fitness_scores']
+    PATH = "logs/"
+    # if ./logs doesn't exist, create it
+
+    unique_file_name = trial_data['type'] + str(trial_data['trial_number']) + ".json"
+    # save run statistics
+    try:
+        if (os.path.exists(PATH+unique_file_name)): raise Exception(f"{unique_file_name} already exists")
+        with open(PATH + unique_file_name, 'w+') as file:
+            json.dump(trial_data, file)
+    except:
+        print("Something went wrong")
+        return False
+    finally:
+        print(f"Successfully saved {unique_file_name}")
     return True
 
-# population_size = 100
-# mutation_rate = 0.1
-# number_of_generations = 1000 # per run
-# number_of_iterations = 1000 # number of runs?
+def save_cities(cities):
+    coordinate_file = open('coord.txt', 'w')
+    coordinate_file.write(cities)
+    coordinate_file.close()
+    return True
 
-# pass log
-# def plot_ga_convergence(population, number_of_iterations, cities):
-#     fitness_values = np.zeros(number_of_iterations)
-#     for i in range(number_of_iterations):
-#         fitness_values[i] = max([fitness_prime(individual, cities) for individual in population])
-#     return fitness_values
+def plot_ga_convergence(graph_data):
+    # get different values for convergence - best solution, population average, population total
+    max = graph_data.max(axis=2)
+    avg = graph_data.mean(axis=2)
+    total = graph_data.sum(axis=2)
 
-def plot_ga_convergence():
-    plt.figure(figsize=(10, 10))
-    for i in range(fitness_values_all_runs.shape[0]): # for each run; range should be arr.shape[0] since 1st dimension is # runs, 2nd dimension is # iterations
-        plt.plot(fitness_values_all_runs[i], alpha=0.5)
-    plt.title(f'All {number_of_trials} Convergence Plots for GA')
-    plt.xlabel('Generations')
-    plt.ylabel('Best Individual Fitness per Generation = (sum of straight-line distance)^2')
+    _, ax = plt.subplots()
+    # graph these separately
+    for i in range(number_of_trials):
+        ax.plot(np.arange(number_of_generations), max[i], label=f"Trial {i+1} - Best Solutions")
+    for i in range(number_of_trials):
+        ax.plot(np.arange(number_of_generations), avg[i], label=f"Trial {i+1} - Population Average")
+    for i in range(number_of_trials):
+        ax.plot(np.arange(number_of_generations), total[i], label=f"Trial {i+1} - Population Sum")
+
+    ax.set_xlabel(f"{number_of_generations} Generations")
+    ax.set_ylabel('Fitness Score')
+    ax.set_title(f'Convergence Across {number_of_trials} Trials')
+    ax.legend()
     plt.show()
     return
 
@@ -94,13 +124,6 @@ def accuracy(individual, cities, number_of_cities, number_of_airports):
         distances[i] = np.min(np.linalg.norm(cities[i] - individual, axis=1))
     return np.sum(distances) / (number_of_cities * number_of_airports)
 
-# Define fitness function - old, using fitness_prime() now
-# def fitness(individual, cities):
-#     distances = np.zeros(len(cities))
-#     for i in range(len(cities)):
-#         distances[i] = np.min(np.linalg.norm(cities[i] - individual, axis=1)) ** 2
-#     return 1 / (np.sum(distances) + 1e-6)
-
 def fitness_prime(individual, cities):
     distances = np.zeros((len(cities), len(individual))) # 2d array for storing locations, return minimum for each city (this is the dist to the closest airport)
     for i in range(len(cities)): # each city
@@ -109,15 +132,14 @@ def fitness_prime(individual, cities):
             airport_x, airport_y = individual[j]
             distances[i][j] = pow(city_x - airport_x, 2) + pow(city_y - airport_y, 2) # linear distance (x_c - x_a)^2 + (y_c - y_a)^2
     # fitness score: higher is better but this wants to minimize distances
-    # input(f"in fitness_prime, distances = {distances}, \n distances.min(axis=1) = {distances.min(axis=1)} which should sum to ={np.sum(distances.min(axis=1))} and invert to {1/np.sum(distances.min(axis=1))}")
     return 1 / np.sum(distances.min(axis=1)) # returns an individual [solution's] fitness value
 
 # Define GA functions
-def create_individual(number_of_cities, number_of_airports):
+def create_individual(number_of_airports):
     return np.random.rand(number_of_airports, 2) * 100
 
-def create_population(number_of_cities, number_of_airports):
-    return [create_individual(number_of_cities, number_of_airports) for i in range(population_size)]
+def create_population(number_of_airports):
+    return [create_individual(number_of_airports) for i in range(population_size)]
 
 def mutate(individual):
     mutated = False
@@ -128,26 +150,13 @@ def mutate(individual):
         mutated = True
     return individual, mutated
 
-# def crossover(parent1, parent2):
-#     # len >= 3
-#     # acceptable range 1 to len() - 1
-
-#     child = np.zeros_like(parent1)
-#     for i in range(len(parent1)):
-#         if random.random() < 0.5:
-#             child[i] = parent1[i]
-#         else:
-#             child[i] = parent2[i]
-#     return child
-
 def crossover(mother, father):
-    # input(f"mom = {mother}\ndad = {father}")
+    mother, father = mother[0], father[0] # get the arrays out of the object
     # 1 < index < len() - 1 and always len() >= 3
     crossover_index = random.randint(1,len(mother) - 1) # mom and dad are the same length
     # slice and concatenate
     brother = np.concatenate((mother[:crossover_index], father[crossover_index:])) # LHS from mom RHS from dad
     sister = np.concatenate((father[:crossover_index], mother[crossover_index:])) # LHS from dad RHS from mom
-    # input(f"brother={brother}\nsister={sister}")
     return brother, sister # children
 
 def select_parents(population, cities):
@@ -158,51 +167,27 @@ def select_parents(population, cities):
     probabilities = [fitness / sum_fitnesses for fitness in fitnesses]
     parents = []
     for i in range(population_size):
-        parent1, parent2 = random.choices(population, weights=probabilities, k=2)
-        parents.append(parent1)
-        parents.append(parent2)
+        parent = random.choices(population, weights=probabilities)
+        parents.append(parent)
     return parents
-    # return parent1, parent2
-
-# def get_all_parents(population, cities):
-#     parents = []
-#     for i in range(len(population)):
-#         parent1, parent2 = select_parents(population, cities)
-#         parents.append(parent1)
-#         parents.append(parent2)
-#     return parents
-
-def save_cities(cities):
-    # np.array(number_of_cities, 2) * 100
-    coordinate_file = open('coord.txt', 'w')
-    # for coord in locations:
-    coordinate_file.write(cities)
-    coordinate_file.close()
-
-    # coordinate_file = open('coord.txt', 'w')
-    # for coord in locations:
-    #     coordinate_file.write(f"{coord[0]} {coord[1]}\n")
-    # coordinate_file.close()
-    return True
 
 def generate_cities(number_of_cities):
     return np.random.rand(number_of_cities, 2) * 100 # gen 2-d array for city locations?; update to read this from file or pass between GA and SA
 
-
 def run_experiment(number_of_trials, number_of_cities, number_of_airports):
-    data = {} # maybe use
+    data = {}
     accuracies = []
     times = []  # Store the time taken for each iteration
     # cities = np.random.rand(number_of_cities, 2) * 100 # gen 2-d array for city locations?; update to read this from file or pass between GA and SA
     cities = generate_cities(number_of_cities)
 
     fitness_values_all_runs = np.zeros((number_of_trials, number_of_iterations)) # for 1000 trials 1000 generations
-
+    all_trials_all_generations_all_population_fitnesses = np.zeros((number_of_trials, number_of_iterations, population_size))
     for i in range(number_of_trials): # run experiment this many times
         progress(i, int(number_of_trials))
         print(f"Run {i + 1} of {number_of_trials}") # replace progress bar here
         start_time = time.time()  # Start the timer
-        best_solution, fitness_values, generation_times_list, best_solution_fitness, generation_population_fitness_scores = find_airports(number_of_cities, number_of_airports, cities) # most of the action here # sanity check: best_solution_fitness == fitness_values.max()
+        best_solution, fitness_values, generation_times_list, best_solution_fitness, generation_population_fitness_scores, runtime = find_airports(number_of_cities, number_of_airports, cities) # most of the action here # sanity check: best_solution_fitness == fitness_values.max()
         # use progress bar
         end_time = time.time()  # End the timer
 
@@ -220,24 +205,30 @@ def run_experiment(number_of_trials, number_of_cities, number_of_airports):
         for each in times:
             sum+=each
         average = sum/len(times)
-        print(f"Run {i} took {elapsed_time:.2f} seconds, reached accuracy {acc:.10f}, the best individual was {best_solution}. The total time is {sum} with an average run time of {average}")
+        # print(f"Run {i} took {elapsed_time:.2f} seconds, reached accuracy {acc:.10f}, the best individual was {best_solution}. The total time is {sum} with an average run time of {average}")
 
         # save data
         # 2D arr at this point? [#generations][#individuals] but want to save each
         data[str(i)] = {
-            '': generation_population_fitness_scores,
-            'best_solution': None,
-            'best_solution_score': None,
-            'trial_time': None,
+            'trial_number': i,
+            'type': 'GA',
+            'best_solution': best_solution.tolist(),
+            'best_solution_score': best_solution_fitness,
+            'runtimes': runtime, # can save progress list .copy()?
+            # need to derive trial time, mean and standard deviation among all trials (not very useful unless it's normalized, since we're supposed to generate random numbers of cities and airports)
+            'accuracy': None, # (Sum of the distance between each of the N cities and its nearest airport) / (N × n) but unclear if this is population accuracy or best accuracy, maybe get both?
+            'number_of_cities': number_of_cities,
+            'number_of_airports': number_of_airports,
+            'number_of_iterations': number_of_iterations,
+            # population_size is derivable
+            'generation_population_fitness_scores': generation_population_fitness_scores.copy(),
+            'cities': cities.tolist()
+            # convergence plot data
+            # global vars that didn't change over time?
             # populate what data you want
             # save it every trial so it can be accessed if this crashes
         }
     # for each run want:
-    run_statistics = {
-        "accuracy": acc,
-        "times": generation_times_list, # 2-d list of [each trial][each generation's runtime]
-
-    }
         # { accuracy: float, times: [], average_time: float, total_time: float, best_individual: [ n (x,y) tuples ], best_individual_each_run: { number_of_generations [ n (x,y) tuples ] } }
         # accuracy = -1 # solution (best individual) accuracy() = (Sum of the distance between each of the N cities and its nearest airport) / (N × n) = fitness^-1 / (N*n) because fitness is 1/(sum of distances)
             # derive
@@ -250,72 +241,61 @@ def run_experiment(number_of_trials, number_of_cities, number_of_airports):
         # best_individuals_per_run = {}
             # derive
             # best_individual = {}
-
-    return accuracies, times, fitness_values_all_runs, run_statistics
+        # print(data[str(i)])
+        all_trials_all_generations_all_population_fitnesses[i] = generation_population_fitness_scores # i think this works
+        save_data(data[str(i)])
+    return accuracies, times, fitness_values_all_runs, data, all_trials_all_generations_all_population_fitnesses
 
 def find_airports(number_of_cities, number_of_airports, cities): # called once per trial
-    population = create_population(number_of_cities, number_of_airports)
-    best_individual = None # not used
-    best_fitness = None # not used
+    population = create_population(number_of_airports)
     fitness_values = np.zeros(number_of_iterations)
-    times = []
+    generation_population_fitness_scores = np.zeros((number_of_iterations, population_size))
+    # times = []
     best_fitness_score_in_all_generations = 0
     best_solution_in_all_generations = None
-
-    generation_population_fitness_scores = np.zeros((number_of_iterations, population_size))
-
+    # run each generation
     for iteration in range(number_of_iterations): # "number_of_generations"
         progress(iteration, number_of_iterations)
-        # timer
-        start = time.time()
+        # timer # start = time.time()
 
         # generational actions
         parents = select_parents(population, cities)
-        # this only selects two parents but needs to happen for the entire population, twice essentially
-        # parents = select_parents(population, cities) # is this trying to change cities? it shouldn't, those are static locations, should only need population for this?
-        # input(f"parents={parents}, range(len(parents)) {range(len(parents))}")
         children = []
-        for i in range(0,len(parents) - 1,2):
+        for i in range(0,len(parents),2):
             brother, sister=crossover(parents[i], parents[i+1]) # pass mom and dad, get two siblings back
             # twins, it's always twins
             children.append(brother)
             children.append(sister)
         for child in children:
-            child, tf = mutate(child) # tf for debug
-            # if tf: print(f"child {child} mutated={tf}")
-        population = children
+            child, tf = mutate(child) # tf for debug # if tf: print(f"child {child} mutated={tf}")
+        population = children # new population
 
         # generational stats
-        # population_fitness_scores = []
         best_fitness_score = 0 # in generation
         best_solution = None # in generation
         # in this generation
         for i in range(len(population)):
             fitness_score = fitness_prime(population[i], cities) # should store each individual's fitness score in an indexed array
+            # input(f"{generation_population_fitness_scores.shape} ?= [{iteration}][{i}] <= [{number_of_iterations}][{population_size}]? len(pop) = {len(population)} pop={population}")
             generation_population_fitness_scores[iteration][i]=fitness_score # [iteration-th][i-th individual]
-            # population_fitnesses[i] = score
+            # redundant - storing all population fitnesses, and can just use np.max() to get this value but it's probably best to save the actual solution instead of storing 999+ suboptimal solutions
             if fitness_score > best_fitness_score:
                 best_fitness_score = fitness_score # float
                 best_solution = population[i] # i int, need the actual individual (set of coords)
-                # print(f"found a new best individual score {best_fitness_score} from individual {population[i]}")
-        # input(f"in generation {iteration} the best fitness score = {best_fitness_score} belongs to {best_solution}")
-
         # all generations so far this run
         if best_fitness_score > best_fitness_score_in_all_generations:
             best_fitness_score_in_all_generations = best_fitness_score
             best_solution_in_all_generations = best_solution
 
         fitness_values[iteration] = best_fitness_score # set best score this generation to fitness_values[generation]
-
-        # maybe get times out of progress bar
-        end = time.time()
-        times.append(end - start) # add this generation's delta time to times; len(times) == number_of_generations on return
+        # maybe get times out of progress bar # end = time.time()
+        # times.append(end - start) # add this generation's delta time to times; len(times) == number_of_generations on return
         # debug
         # print(f"{iteration}th generation took {(end - start):.2f} seconds, fittest individual is {(best_fitness_score*10000):.5f} (dist: {(1/best_fitness_score):.5f}) current best fitness is {(best_fitness_score_in_all_generations*100000):.5f} which is a distance delta of {(1/best_fitness_score_in_all_generations):.5f}")
-    # return best_individual, fitness_values, times
-    return best_solution_in_all_generations, fitness_values, times, best_fitness_score_in_all_generations, generation_population_fitness_scores # need to find min fitness for plotting
+    runtime = get_progress_info_intervals()
+    return best_solution_in_all_generations, fitness_values, times, best_fitness_score_in_all_generations, generation_population_fitness_scores, runtime # need to find min fitness for plotting
 
-# set_default_global_vars() or manually call setters first
+# set_default_global_vars() or manually call setters first;
 set_default_global_vars()
 if (input("change defaults y") == "y"):
     N = input(f"cities")
@@ -339,7 +319,7 @@ if (input("change defaults y") == "y"):
     set_mutation_rate(float(m))
     set_population_size(int(k))
 
-accuracies, times, fitness_values_all_runs, run_statistics = run_experiment(number_of_trials, number_of_cities, number_of_airports)
+accuracies, times, fitness_values_all_runs, data, graph_data = run_experiment(number_of_trials, number_of_cities, number_of_airports)
 
 # Calculate mean and standard deviation of accuracies
 mean_accuracy = np.mean(accuracies)
@@ -349,14 +329,4 @@ std_accuracy = np.std(accuracies)
 mean_time = np.mean(times)
 std_time = np.std(times)
 
-# debug
-# print(f"fitness values all runs: {fitness_values_all_runs} f.shape() = {fitness_values_all_runs.shape()}; f.size() = {fitness_values_all_runs.size()}")
-# plt.figure(figsize=(10, 10))
-# for i in range(fitness_values_all_runs.shape[0]): # range should be arr.shape[0] since 1st dimension is # runs, 2nd dimension is # iterations
-#     plt.plot(fitness_values_all_runs[i], alpha=0.1)
-# plt.title('All 1000 Convergence Plots for GA')
-# plt.xlabel('Number of iterations')
-# plt.ylabel('Fitness')
-# plt.show()
-
-plot_ga_convergence()
+plot_ga_convergence(graph_data)

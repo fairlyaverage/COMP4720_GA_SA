@@ -21,6 +21,14 @@ FULL = '█'
 # print(f"[{progress}{remainder}] {percent}")
 # LINE_UP end with LINE_CLEAR
 
+def get_runtime():
+    if progress_info_intervals: return sum(progress_info_intervals)
+    return False
+
+def get_progress_info_intervals():
+    if progress_info_intervals: return progress_info_intervals.copy()
+    return False
+
 def progress_info():
     global progress_info_log, progress_info_intervals
     progress_info_log = []
@@ -42,22 +50,27 @@ def update_progress_info(part, whole):
     if len(progress_info_log) > 1: progress_info_intervals.append(current_time - progress_info_log[-2])
     else: progress_info_intervals.append(0)
 
-    elapsed = sum(progress_info_intervals)
-    average_interval = progress_info_intervals[-1] # elapsed / len(progress_info_intervals)
+    elapsed = get_runtime()
+    average_interval = progress_info_intervals[-1] # elapsed / len(progress_info_intervals) # not actually avg, just last
     estimated_time_to_completion = (whole - part) * average_interval
     # progress_info_log.append(current_time - progress_info_log[-1])
     estimated_total_time = elapsed + estimated_time_to_completion
     # print(f"intervals = {progress_info_intervals}\n progress_log={progress_info_log}\n")
     return average_interval, elapsed, estimated_time_to_completion, estimated_total_time
 
-def progress(part, whole):
+def line_clear(n=1):
+    LINE_UP, LINE_CLEAR = '\033[1A', '\x1b[2K'
+    print(LINE_CLEAR, end=LINE_UP)
+
+
+def progress(part, whole, *loop_info):
     # whole -= 1 # if exclusive range e.g. i in range(10) only goes from 0-9
     if part == 0: progress_info()
     MAX = 50 # + '[] 100.0%' 8-9 extra chars
     # special characters
     EMPTY = '░'
     FULL = '█'
-    LINE_UP, LINE_CLEAR = '\033[1A', '\x1b[2K'
+    # LINE_UP, LINE_CLEAR = '\033[1A', '\x1b[2K'
 
     percent = round((part / whole) * 100, 1) # float .1
     average_interval, elapsed, estimated_time_to_completion, estimated_total_time = update_progress_info(part, whole)
@@ -68,10 +81,15 @@ def progress(part, whole):
     # ░░░░░░░░░░ adjusted to 50 chars
     remaining = EMPTY * math.ceil((100 - percent) * .5) # see above
 
+    # optional loop info
+    if loop_info: # skip if empty
+        pass
+
     output = f'[{complete}{remaining}] {percent}% | avg: {(average_interval*1000):.0f}ms elapsed: {(elapsed):.0f}s remaining: {(estimated_time_to_completion):.3f}s / {(estimated_time_to_completion / 60):.0f}m / {(estimated_time_to_completion / (60 * 60)):.0f}h total: {(estimated_total_time):.3f}s'
-    print(LINE_CLEAR, end=LINE_UP)
+    line_clear()
     print(output)
-    if part == whole: print(LINE_CLEAR, end=LINE_UP)
+
+    if part == whole: line_clear()
 
 # delta = 60 # sec, for debug
 # for i in range(delta):
